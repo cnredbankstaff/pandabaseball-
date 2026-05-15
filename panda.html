@@ -6,6 +6,7 @@
   <title>Panda Baseball Dynasty</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="/_sdk/element_sdk.js"></script>
   <script src="/_sdk/data_sdk.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=Outfit:wght@300;400;600;700&amp;display=swap" rel="stylesheet">
@@ -39,11 +40,11 @@
     .crowd-person { animation: crowd-wave 1.5s ease-in-out infinite; }
     .crowd-person:nth-child(odd) { animation-delay: 0.3s; }
     .crowd-person:nth-child(3n) { animation-delay: 0.6s; }
-    @keyframes ball-fly {
-      0% { transform: translate(0, 0) scale(1); opacity: 1; }
-      100% { transform: translate(var(--bx), var(--by)) scale(0.3); opacity: 0.5; }
+    #canvas-3d {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
-    .ball-flying { animation: ball-fly 1.2s ease-out forwards; }
     @keyframes pitch-come {
       0% { transform: translate(0, -200px) scale(0.2); opacity: 0.3; }
       100% { transform: translate(var(--px), 0) scale(1); opacity: 1; }
@@ -142,19 +143,36 @@
       </div><!-- Field (perspective view) -->
       <div class="absolute bottom-0 left-0 right-0 h-3/5 field-perspective"><!-- Outfield grass -->
        <div class="absolute inset-0 bg-gradient-to-b from-green-500 to-green-700" style="transform: rotateX(45deg); transform-origin: bottom;"></div><!-- Infield dirt -->
-       <div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-48 h-32 bg-amber-700 rounded-full opacity-60" style="transform: rotateX(45deg);"></div><!-- Bases -->
-       <div class="absolute bottom-16 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45" title="2nd Base"></div>
-       <div class="absolute bottom-10 left-[35%] w-4 h-4 bg-white rotate-45" title="3rd Base"></div>
-       <div class="absolute bottom-10 right-[35%] w-4 h-4 bg-white rotate-45" title="1st Base"></div><!-- Pitcher's mound -->
+       <div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-48 h-32 bg-amber-700 rounded-full opacity-60" style="transform: rotateX(45deg);"></div><!-- Pitcher's mound -->
        <div class="absolute bottom-12 left-1/2 -translate-x-1/2 w-6 h-3 bg-amber-800 rounded-full"></div><!-- Pitcher panda -->
        <div class="absolute bottom-14 left-1/2 -translate-x-1/2 text-2xl">
         🐼
+       </div><!-- 1B with glove -->
+       <div class="absolute bottom-16 right-[35%] w-8 h-8 bg-white rotate-45 flex items-center justify-center cursor-pointer hover:scale-110 transition" id="fielder-1b">
+        <div class="text-lg font-bold text-gray-800">
+         🧤
+        </div>
+       </div><!-- 2B with glove -->
+       <div class="absolute bottom-16 left-1/2 -translate-x-1/2 w-8 h-8 bg-white rotate-45 flex items-center justify-center cursor-pointer hover:scale-110 transition" id="fielder-2b">
+        <div class="text-lg font-bold text-gray-800">
+         🧤
+        </div>
+       </div><!-- 3B with glove -->
+       <div class="absolute bottom-16 left-[35%] w-8 h-8 bg-white rotate-45 flex items-center justify-center cursor-pointer hover:scale-110 transition" id="fielder-3b">
+        <div class="text-lg font-bold text-gray-800">
+         🧤
+        </div>
        </div><!-- Foul lines -->
        <div class="absolute bottom-0 left-1/2 w-0.5 h-full bg-white/30 origin-bottom" style="transform: rotate(-45deg);"></div>
        <div class="absolute bottom-0 left-1/2 w-0.5 h-full bg-white/30 origin-bottom" style="transform: rotate(45deg);"></div>
       </div><!-- Ball animation area -->
       <div id="ball-area" class="absolute inset-0 pointer-events-none flex items-center justify-center">
        <div id="the-ball" class="w-5 h-5 bg-white rounded-full shadow-lg hidden border border-gray-300"></div>
+      </div><!-- Fielder selection UI -->
+      <div id="fielder-select-ui" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/90 rounded-xl p-6 hidden text-center z-50 border border-amber-500">
+       <p class="text-lg text-amber-300 mb-4 font-bold">Choose Fielder to Chase the Ball:</p>
+       <div class="flex gap-3 justify-center flex-wrap"><button onclick="assignFielder('LF')" class="btn-game bg-green-600 text-white text-sm">🏃 LF - Stretch</button> <button onclick="assignFielder('CF')" class="btn-game bg-green-600 text-white text-sm">🏃 CF - Tower</button> <button onclick="assignFielder('RF')" class="btn-game bg-green-600 text-white text-sm">🏃 RF - Giant</button>
+       </div>
       </div><!-- HUD -->
       <div class="absolute top-2 left-2 bg-black/60 rounded-lg p-2 text-xs">
        <div id="bat-count" class="text-amber-300 font-bold">
@@ -188,6 +206,14 @@
          Wait for pitch...
         </div>
         <div class="flex gap-2 justify-center mt-3"><button onclick="swingBat('contact')" class="btn-game bg-blue-600 text-white text-sm">🏏 Contact</button> <button onclick="swingBat('power')" class="btn-game bg-red-600 text-white text-sm">💥 Power</button> <button onclick="swingBat('bunt')" class="btn-game bg-gray-600 text-white text-sm">👆 Bunt</button>
+        </div><!-- Base Running UI -->
+        <div id="steal-section" class="hidden border-t border-gray-600 pt-3 mt-3">
+         <p class="text-xs text-gray-400 mb-2">🏃 On Base! Steal Next Base?</p>
+         <div class="flex gap-2 justify-center"><button onclick="attemptSteal()" class="btn-game bg-yellow-600 text-white text-sm">🏃 Steal!</button> <button onclick="stayBase()" class="btn-game bg-gray-600 text-white text-sm">Stay Safe</button>
+         </div>
+        </div><!-- Bases Display -->
+        <div id="bases-display" class="text-xs text-gray-400 mt-2 flex gap-1 justify-center">
+         <span>1B: <span id="base1" class="text-green-400">--</span></span> <span>2B: <span id="base2" class="text-green-400">--</span></span> <span>3B: <span id="base3" class="text-green-400">--</span></span>
         </div>
        </div><!-- Result -->
        <div class="text-center min-w-[120px]">
@@ -316,10 +342,9 @@
    <div id="team-screen" class="h-full overflow-auto p-6 hidden screen-fade"><button onclick="showScreen('menu-screen')" class="btn-game bg-gray-700 text-white mb-4 text-sm">← Back</button>
     <h2 class="bebas text-4xl text-amber-400 mb-4">Your Panda Squad 🐼</h2>
     <div id="team-roster" class="grid md:grid-cols-3 gap-4 max-w-4xl"><!-- Filled dynamically -->
-    </div>
+    </div><button onclick="showScreen('evolution-screen')" class="btn-game bg-purple-600 text-white text-lg mt-6">✨ Evolution Chamber</button>
    </div>
-  </div>
-  <script>
+   <script>
 // Game State
 let gameState = {
   team_name: 'Bamboo Crushers',
@@ -339,6 +364,13 @@ let gameState = {
   pitching_accuracy: 50,
   fielding_speed: 50,
   fielding_range: 50,
+  p1_evolved: 0,
+  p2_evolved: 0,
+  p3_evolved: 0,
+  of1_evolved: 0,
+  of2_evolved: 0,
+  of3_evolved: 0,
+  learned_pitches: 'Fastball',
   wins: 0,
   losses: 0
 };
@@ -346,7 +378,1185 @@ let gameState = {
 let savedRecord = null;
 
 // Batting state
-let batState = { strikes: 0, balls: 0, outs: 0, score: [0,0], selectedZone: 4, pitchActive: false, timingPos: 0, timingInterval: null };
+let batState = { strikes: 0, balls: 0, outs: 0, score: [0,0], selectedZone: 4, pitchActive: false, timingPos: 0, timingInterval: null, bases: [false, false, false], currentBase: 0, canSteal: false };
+// Pitching state
+let pitchState = { strikes: 0, balls: 0, outs: 0, selectedPitch: 'Fastball', selectedZone: 4 };
+
+// Element SDK
+const defaultConfig = {
+  title_text: 'Panda Baseball Dynasty',
+  background_color: '#14532d',
+  surface_color: '#1f2937',
+  text_color: '#fbbf24',
+  primary_action_color: '#f59e0b',
+  secondary_action_color: '#2563eb',
+  font_family: 'Outfit',
+  font_size: 16
+};
+
+function applyConfig(config) {
+  const title = document.getElementById('game-title');
+  if (title) title.textContent = config.title_text || defaultConfig.title_text;
+  
+  const app = document.getElementById('app');
+  if (app) app.style.fontFamily = `${config.font_family || defaultConfig.font_family}, sans-serif`;
+}
+
+window.elementSdk.init({
+  defaultConfig,
+  onConfigChange: async (config) => { applyConfig(config); },
+  mapToCapabilities: (config) => ({
+    recolorables: [
+      { get: () => config.background_color || defaultConfig.background_color, set: (v) => { config.background_color = v; window.elementSdk.setConfig({ background_color: v }); }},
+      { get: () => config.surface_color || defaultConfig.surface_color, set: (v) => { config.surface_color = v; window.elementSdk.setConfig({ surface_color: v }); }},
+      { get: () => config.text_color || defaultConfig.text_color, set: (v) => { config.text_color = v; window.elementSdk.setConfig({ text_color: v }); }},
+      { get: () => config.primary_action_color || defaultConfig.primary_action_color, set: (v) => { config.primary_action_color = v; window.elementSdk.setConfig({ primary_action_color: v }); }},
+      { get: () => config.secondary_action_color || defaultConfig.secondary_action_color, set: (v) => { config.secondary_action_color = v; window.elementSdk.setConfig({ secondary_action_color: v }); }}
+    ],
+    borderables: [],
+    fontEditable: { get: () => config.font_family || defaultConfig.font_family, set: (v) => { config.font_family = v; window.elementSdk.setConfig({ font_family: v }); }},
+    fontSizeable: { get: () => config.font_size || defaultConfig.font_size, set: (v) => { config.font_size = v; window.elementSdk.setConfig({ font_size: v }); }}
+  }),
+  mapToEditPanelValues: (config) => new Map([
+    ['title_text', config.title_text || defaultConfig.title_text]
+  ])
+});
+
+// Data SDK
+const dataHandler = {
+  onDataChanged(data) {
+    if (data.length > 0) {
+      const rec = data[0];
+      savedRecord = rec;
+      gameState.team_name = rec.team_name || gameState.team_name;
+      gameState.stadium = rec.stadium || gameState.stadium;
+      gameState.skill_level = rec.skill_level || gameState.skill_level;
+      gameState.jersey_color = rec.jersey_color || gameState.jersey_color;
+      gameState.p1_name = rec.p1_name || gameState.p1_name;
+      gameState.p2_name = rec.p2_name || gameState.p2_name;
+      gameState.p3_name = rec.p3_name || gameState.p3_name;
+      gameState.of1_name = rec.of1_name || gameState.of1_name;
+      gameState.of2_name = rec.of2_name || gameState.of2_name;
+      gameState.of3_name = rec.of3_name || gameState.of3_name;
+      gameState.pitcher_name = rec.pitcher_name || gameState.pitcher_name;
+      gameState.batting_contact = rec.batting_contact || 50;
+      gameState.batting_power = rec.batting_power || 50;
+      gameState.pitching_speed = rec.pitching_speed || 50;
+      gameState.pitching_accuracy = rec.pitching_accuracy || 50;
+      gameState.fielding_speed = rec.fielding_speed || 50;
+      gameState.fielding_range = rec.fielding_range || 50;
+      gameState.p1_evolved = rec.p1_evolved || 0;
+      gameState.p2_evolved = rec.p2_evolved || 0;
+      gameState.p3_evolved = rec.p3_evolved || 0;
+      gameState.of1_evolved = rec.of1_evolved || 0;
+      gameState.of2_evolved = rec.of2_evolved || 0;
+      gameState.of3_evolved = rec.of3_evolved || 0;
+      gameState.pitcher_evolved = rec.pitcher_evolved || 0;
+      gameState.learned_pitches = rec.learned_pitches || 'Fastball';
+      gameState.opponent = rec.opponent || gameState.opponent;
+      gameState.wins = rec.wins || 0;
+      gameState.losses = rec.losses || 0;
+      updateUIFromState();
+    }
+  }
+};
+
+(async () => {
+  await window.dataSdk.init(dataHandler);
+})();
+
+function updateUIFromState() {
+  const el = document.getElementById('record-display');
+  if (el) el.textContent = `${gameState.team_name} | W:${gameState.wins} L:${gameState.losses} | ${gameState.stadium}`;
+  updateTrainingBars();
+  updateTeamRoster();
+}
+
+// Screen management
+function showScreen(id) {
+  document.querySelectorAll('#app > div').forEach(d => d.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  if (id === 'team-screen') updateTeamRoster();
+  if (id === 'training-screen') updateTrainingBars();
+  if (id === 'evolution-screen') updateEvolutionRoster();
+}
+
+// Setup
+function setSkill(level) {
+  gameState.skill_level = level;
+  document.querySelectorAll('.skill-btn').forEach(b => b.style.outline = 'none');
+  document.querySelector(`[data-level="${level}"]`).style.outline = '3px solid #fbbf24';
+}
+
+function setJersey(color) {
+  gameState.jersey_color = color;
+  document.querySelectorAll('.jersey-btn').forEach(b => b.style.outline = 'none');
+  event.target.style.outline = '3px solid white';
+}
+
+async function saveSetup() {
+  gameState.team_name = document.getElementById('team-name-input').value || gameState.team_name;
+  gameState.p1_name = document.getElementById('p1-name').value || gameState.p1_name;
+  gameState.p2_name = document.getElementById('p2-name').value || gameState.p2_name;
+  gameState.p3_name = document.getElementById('p3-name').value || gameState.p3_name;
+  gameState.of1_name = document.getElementById('of1-name').value || gameState.of1_name;
+  gameState.of2_name = document.getElementById('of2-name').value || gameState.of2_name;
+  gameState.of3_name = document.getElementById('of3-name').value || gameState.of3_name;
+  gameState.pitcher_name = document.getElementById('pitcher-name').value || gameState.pitcher_name;
+
+  const data = { type: 'team', ...gameState };
+  delete data.wins; delete data.losses;
+  data.wins = gameState.wins;
+  data.losses = gameState.losses;
+
+  if (savedRecord) {
+    await window.dataSdk.update({ ...savedRecord, ...data });
+  } else {
+    await window.dataSdk.create(data);
+  }
+  showScreen('menu-screen');
+}
+
+// BATTING
+function startBatting() {
+  resetBatting();
+  showScreen('batting-screen');
+  buildStrikeZone('bat-strike-zone', 'bat');
+  document.getElementById('stadium-name').textContent = gameState.stadium;
+  startTimingBar();
+  setTimeout(() => init3DField(), 100);
+}
+
+function buildStrikeZone(containerId, type) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('div');
+    cell.dataset.zone = i;
+    if (i === 4) cell.classList.add('selected');
+    cell.onclick = () => {
+      container.querySelectorAll('div').forEach(d => d.classList.remove('selected'));
+      cell.classList.add('selected');
+      if (type === 'bat') batState.selectedZone = i;
+      else pitchState.selectedZone = i;
+    };
+    container.appendChild(cell);
+  }
+}
+
+function buildCrowd(containerId) {
+  const c = document.getElementById(containerId);
+  c.innerHTML = '';
+  const colors = ['🧑','👩','👨','🧔','👧','👦','🧓','👴','👵'];
+  for (let i = 0; i < 60; i++) {
+    const span = document.createElement('span');
+    span.className = 'crowd-person text-xs';
+    span.textContent = colors[Math.floor(Math.random() * colors.length)];
+    c.appendChild(span);
+  }
+}
+
+let scene3D, camera3D, renderer3D, ball3D, pitcher3D, bases3D = {};
+
+function init3DField() {
+  const canvas = document.getElementById('canvas-3d');
+  if (!canvas) return;
+
+  // Scene setup
+  scene3D = new THREE.Scene();
+  scene3D.background = new THREE.Color(0x87CEEB);
+  scene3D.fog = new THREE.Fog(0x87CEEB, 300, 500);
+
+  camera3D = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+  camera3D.position.set(0, 15, 30);
+  camera3D.lookAt(0, 0, 0);
+
+  renderer3D = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer3D.setSize(canvas.clientWidth, canvas.clientHeight);
+  renderer3D.shadowMap.enabled = true;
+  renderer3D.shadowMap.type = THREE.PCFShadowShadowMap;
+
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene3D.add(ambientLight);
+
+  const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  sunLight.position.set(50, 60, 30);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.camera.left = -100;
+  sunLight.shadow.camera.right = 100;
+  sunLight.shadow.camera.top = 100;
+  sunLight.shadow.camera.bottom = -100;
+  scene3D.add(sunLight);
+
+  // Field - Outfield grass
+  const grassGeom = new THREE.CircleGeometry(150, 64);
+  const grassMat = new THREE.MeshLambertMaterial({ color: 0x2d5016 });
+  const grass = new THREE.Mesh(grassGeom, grassMat);
+  grass.rotation.x = -Math.PI / 2;
+  grass.receiveShadow = true;
+  scene3D.add(grass);
+
+  // Infield dirt diamond
+  const dirtGeom = new THREE.CircleGeometry(95, 4);
+  const dirtMat = new THREE.MeshLambertMaterial({ color: 0x8B6F47 });
+  const dirt = new THREE.Mesh(dirtGeom, dirtMat);
+  dirt.rotation.x = -Math.PI / 2;
+  dirt.position.y = 0.01;
+  dirt.receiveShadow = true;
+  scene3D.add(dirt);
+
+  // Pitcher's mound
+  const moundGeom = new THREE.ConeGeometry(12, 2, 32);
+  const moundMat = new THREE.MeshLambertMaterial({ color: 0x8B7355 });
+  const mound = new THREE.Mesh(moundGeom, moundMat);
+  mound.position.y = 1;
+  mound.position.z = 15;
+  mound.castShadow = true;
+  scene3D.add(mound);
+
+  // Bases (white squares)
+  const basePositions = {
+    '1B': [67, 0.05, -67],
+    '2B': [0, 0.05, -95],
+    '3B': [-67, 0.05, -67]
+  };
+
+  for (const [name, pos] of Object.entries(basePositions)) {
+    const baseGeom = new THREE.BoxGeometry(3, 0.1, 3);
+    const baseMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+    const base = new THREE.Mesh(baseGeom, baseMat);
+    base.position.set(...pos);
+    base.receiveShadow = true;
+    bases3D[name] = base;
+    scene3D.add(base);
+  }
+
+  // Pitcher panda
+  pitcher3D = createPanda();
+  pitcher3D.position.set(0, 0, 15);
+  scene3D.add(pitcher3D);
+
+  // Baseball
+  const ballGeom = new THREE.SphereGeometry(0.5, 32, 32);
+  const ballMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, emissive: 0xFFFFFF, emissiveIntensity: 0.1 });
+  ball3D = new THREE.Mesh(ballGeom, ballMat);
+  ball3D.castShadow = true;
+  ball3D.receiveShadow = true;
+  ball3D.position.set(0, 2, 20);
+  scene3D.add(ball3D);
+
+  // Outfielders
+  createOutfielder('LF', -80, 0, -100);
+  createOutfielder('CF', 0, 0, -130);
+  createOutfielder('RF', 80, 0, -100);
+
+  // Stadium walls
+  const wallGeom = new THREE.BoxGeometry(300, 30, 10);
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+  const wall = new THREE.Mesh(wallGeom, wallMat);
+  wall.position.z = -160;
+  wall.receiveShadow = true;
+  scene3D.add(wall);
+
+  // Crowd stands
+  for (let i = -150; i <= 150; i += 30) {
+    const crowdGeom = new THREE.BoxGeometry(30, 20, 20);
+    const crowdMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const crowd = new THREE.Mesh(crowdGeom, crowdMat);
+    crowd.position.set(i, 15, -180);
+    crowd.receiveShadow = true;
+    scene3D.add(crowd);
+  }
+
+  // Animation loop
+  function animate() {
+    requestAnimationFrame(animate);
+    renderer3D.render(scene3D, camera3D);
+  }
+  animate();
+
+  // Handle resize
+  window.addEventListener('resize', () => {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    camera3D.aspect = w / h;
+    camera3D.updateProjectionMatrix();
+    renderer3D.setSize(w, h);
+  });
+}
+
+function createPanda() {
+  const group = new THREE.Group();
+  
+  // Body
+  const bodyGeom = new THREE.SphereGeometry(2, 32, 32);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
+  const body = new THREE.Mesh(bodyGeom, bodyMat);
+  body.scale.set(1, 1.2, 0.8);
+  body.castShadow = true;
+  group.add(body);
+  
+  // Head
+  const headGeom = new THREE.SphereGeometry(1.2, 32, 32);
+  const head = new THREE.Mesh(headGeom, bodyMat);
+  head.position.y = 2.8;
+  head.castShadow = true;
+  group.add(head);
+  
+  // Eyes
+  const eyeGeom = new THREE.SphereGeometry(0.3, 16, 16);
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+  
+  const eye1 = new THREE.Mesh(eyeGeom, eyeMat);
+  eye1.position.set(-0.4, 3.3, 1.1);
+  group.add(eye1);
+  
+  const eye2 = new THREE.Mesh(eyeGeom, eyeMat);
+  eye2.position.set(0.4, 3.3, 1.1);
+  group.add(eye2);
+  
+  return group;
+}
+
+function createOutfielder(position, x, y, z) {
+  const panda = createPanda();
+  panda.position.set(x, y, z);
+  panda.scale.set(0.8, 0.8, 0.8);
+  scene3D.add(panda);
+}
+
+function animateBall3D(result) {
+  if (!ball3D) return;
+  
+  let targetX = (batState.selectedZone % 3 - 1) * 40;
+  let targetZ = result.includes('HOME') ? -200 : result.includes('Triple') ? -120 : result.includes('Double') ? -95 : -70;
+  let targetY = result.includes('HOME') ? 60 : 40;
+  
+  const startPos = { x: ball3D.position.x, y: ball3D.position.y, z: ball3D.position.z };
+  const duration = 1.5;
+  const startTime = Date.now();
+  
+  function animate3D() {
+    const elapsed = (Date.now() - startTime) / 1000;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Arc trajectory
+    const height = Math.sin(progress * Math.PI) * targetY;
+    ball3D.position.x = startPos.x + (targetX - startPos.x) * progress;
+    ball3D.position.y = startPos.y + height;
+    ball3D.position.z = startPos.z + (targetZ - startPos.z) * progress;
+    ball3D.rotation.x += 0.3;
+    ball3D.rotation.y += 0.3;
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate3D);
+    }
+  }
+  animate3D();
+}
+
+let timingRunning = false;
+function startTimingBar() {
+  timingRunning = true;
+  batState.timingPos = 0;
+  const marker = document.getElementById('timing-marker');
+  let dir = 1;
+  if (batState.timingInterval) clearInterval(batState.timingInterval);
+  
+  const speed = gameState.skill_level === 'professional' ? 8 : gameState.skill_level === 'advanced' ? 6 : gameState.skill_level === 'intermediate' ? 4 : 3;
+  
+  batState.timingInterval = setInterval(() => {
+    if (!timingRunning) return;
+    batState.timingPos += dir * speed;
+    if (batState.timingPos >= 100 || batState.timingPos <= 0) dir *= -1;
+    marker.style.left = batState.timingPos + '%';
+  }, 20);
+}
+
+function getTimingResult() {
+  const pos = batState.timingPos;
+  if (pos >= 42 && pos <= 58) return 'Perfect';
+  if (pos >= 30 && pos <= 70) return 'Good';
+  if (pos < 30) return 'Early';
+  return 'Late';
+}
+
+function swingBat(type) {
+  if (!timingRunning) return;
+  const timing = getTimingResult();
+  document.getElementById('timing-label').textContent = timing + '!';
+  
+  const contactChance = (gameState.batting_contact / 100) * (timing === 'Perfect' ? 0.95 : timing === 'Good' ? 0.7 : 0.35);
+  const hit = Math.random() < contactChance;
+  
+  if (!hit) {
+    // Miss - strike
+    batState.strikes++;
+    if (batState.strikes >= 3) {
+      batState.outs++;
+      batState.strikes = 0;
+      batState.balls = 0;
+      batState.bases = [false, false, false];
+      batState.currentBase = 0;
+      document.getElementById('bat-result').textContent = 'Strikeout! ❌';
+    } else {
+      document.getElementById('bat-result').textContent = `Strike ${batState.strikes}! (${timing})`;
+    }
+  } else {
+    // Hit - determine outcome
+    const power = gameState.batting_power / 100;
+    const roll = Math.random();
+    let result;
+    let baseHit = false;
+    
+    if (type === 'bunt') {
+      result = 'Bunt Single! 🏃';
+      baseHit = true;
+      batState.currentBase = 1;
+    } else if (type === 'power' && timing === 'Perfect' && roll < power * 0.4) {
+      result = '💣 HOME RUN! 💣';
+      batState.score[0]++;
+      batState.bases = [false, false, false];
+      batState.currentBase = 0;
+    } else if (roll < 0.15) {
+      result = 'Foul Ball!';
+      if (batState.strikes < 2) batState.strikes++;
+    } else if (roll < 0.4) {
+      result = 'Single! 🏃';
+      baseHit = true;
+      batState.currentBase = 1;
+    } else if (roll < 0.6) {
+      result = 'Double! 🏃🏃';
+      baseHit = true;
+      batState.currentBase = 2;
+    } else if (roll < 0.75) {
+      result = 'Triple! 🏃🏃🏃';
+      baseHit = true;
+      batState.currentBase = 3;
+    } else if (timing === 'Perfect' && type === 'power') {
+      result = '💣 HOME RUN! 💣';
+      batState.score[0]++;
+      batState.bases = [false, false, false];
+      batState.currentBase = 0;
+    } else {
+      result = 'Fly Out! 🧤';
+      batState.outs++;
+      batState.strikes = 0;
+      batState.balls = 0;
+      batState.bases = [false, false, false];
+      batState.currentBase = 0;
+      document.getElementById('fielder-select-ui').classList.remove('hidden');
+    }
+    
+    if (result.includes('Foul')) {
+      // foul - don't reset count
+    } else if (!result.includes('Out') && !result.includes('HOME')) {
+      batState.strikes = 0;
+      batState.balls = 0;
+    }
+    
+    if (baseHit) {
+      batState.bases[2] = batState.bases[1];
+      batState.bases[1] = batState.bases[0];
+      batState.bases[0] = true;
+      
+      batState.canSteal = true;
+      document.getElementById('steal-section').classList.remove('hidden');
+      document.getElementById('bat-result').textContent = result;
+    } else if (!result.includes('Fly')) {
+      document.getElementById('bat-result').textContent = result;
+      document.getElementById('steal-section').classList.add('hidden');
+    } else {
+      document.getElementById('bat-result').textContent = result;
+    }
+    
+    if (!result.includes('Foul') && !result.includes('Out') && !result.includes('Strike')) {
+      animateBall(result);
+    }
+  }
+  
+  updateBatHUD();
+  timingRunning = false;
+}
+
+function attemptSteal() {
+  const stealSuccess = Math.random() < (gameState.batting_contact / 100 * 0.6);
+  if (stealSuccess) {
+    batState.currentBase++;
+    if (batState.currentBase >= 4) {
+      batState.score[0]++;
+      batState.currentBase = 0;
+      batState.bases[0] = false;
+      document.getElementById('bat-result').textContent = '💨 Stole base & scored! 🎉';
+    } else {
+      document.getElementById('bat-result').textContent = '💨 Stole the base! 🏃';
+    }
+  } else {
+    batState.outs++;
+    batState.currentBase = 0;
+    batState.bases[0] = false;
+    document.getElementById('bat-result').textContent = '❌ Caught stealing! Out!';
+  }
+  document.getElementById('steal-section').classList.add('hidden');
+  batState.canSteal = false;
+  updateBatHUD();
+}
+
+function stayBase() {
+  document.getElementById('bat-result').textContent = '🤐 Playing it safe!';
+  document.getElementById('steal-section').classList.add('hidden');
+  batState.canSteal = false;
+}
+
+function assignFielder(outfielder) {
+  const names = {
+    'LF': gameState.of1_name,
+    'CF': gameState.of2_name,
+    'RF': gameState.of3_name
+  };
+  
+  const successChance = gameState.fielding_range / 100 * 0.8;
+  const caught = Math.random() < successChance;
+  
+  if (caught) {
+    document.getElementById('bat-result').textContent = `🎉 ${names[outfielder]} caught it! Out!`;
+  } else {
+    document.getElementById('bat-result').textContent = `❌ ${names[outfielder]} missed it! Base hit!`;
+    batState.outs--;
+  }
+  
+  document.getElementById('fielder-select-ui').classList.add('hidden');
+  updateBatHUD();
+}
+
+function animateBall(result) {
+  const ball = document.getElementById('the-ball');
+  ball.classList.remove('ball-flying', 'hidden');
+  ball.style.removeProperty('--bx');
+  ball.style.removeProperty('--by');
+  void ball.offsetWidth;
+  
+  const xDir = (batState.selectedZone % 3 - 1) * 80;
+  const yDist = result.includes('HOME') ? -250 : -150;
+  ball.style.setProperty('--bx', xDir + 'px');
+  ball.style.setProperty('--by', yDist + 'px');
+  ball.classList.add('ball-flying');
+  setTimeout(() => ball.classList.add('hidden'), 1200);
+}
+
+function nextPitch() {
+  if (batState.outs >= 3) {
+    batState.outs = 0;
+    batState.score[1] += Math.random() < 0.3 ? 1 : 0;
+    document.getElementById('bat-result').textContent = 'New Inning!';
+  }
+  timingRunning = true;
+  document.getElementById('timing-label').textContent = 'Swing!';
+  document.getElementById('bat-result').textContent = '⚾ Pitch coming...';
+  updateBatHUD();
+}
+
+function updateBatHUD() {
+  document.getElementById('bat-count').textContent = `Count: ${batState.balls}-${batState.strikes}`;
+  document.getElementById('bat-outs').textContent = `Outs: ${batState.outs}`;
+  document.getElementById('bat-score').textContent = `Score: ${batState.score[0]}-${batState.score[1]}`;
+  
+  const b1 = document.getElementById('base1');
+  const b2 = document.getElementById('base2');
+  const b3 = document.getElementById('base3');
+  if (b1) b1.textContent = batState.bases[0] ? '🐼' : '--';
+  if (b2) b2.textContent = batState.bases[1] ? '🐼' : '--';
+  if (b3) b3.textContent = batState.bases[2] ? '🐼' : '--';
+}
+
+function resetBatting() {
+  batState = { strikes: 0, balls: 0, outs: 0, score: [0,0], selectedZone: 4, pitchActive: false, timingPos: 0, timingInterval: null, bases: [false, false, false], currentBase: 0, canSteal: false };
+  if (batState.timingInterval) clearInterval(batState.timingInterval);
+  timingRunning = false;
+}
+
+// PITCHING
+function startPitching() {
+  resetPitching();
+  showScreen('pitching-screen');
+  buildStrikeZone('pitch-strike-zone', 'pitch');
+  buildCrowd('pitch-crowd');
+  updatePitchButtons();
+}
+
+function updatePitchButtons() {
+  const container = document.getElementById('pitch-buttons');
+  const options = getPitchOptions();
+  const colors = ['bg-red-700', 'bg-blue-700', 'bg-purple-700', 'bg-green-700', 'bg-orange-700', 'bg-gray-600', 'bg-pink-700', 'bg-cyan-700', 'bg-yellow-700', 'bg-indigo-700', 'bg-violet-700', 'bg-amber-700', 'bg-emerald-700'];
+  
+  container.innerHTML = options.map((pitch, idx) => `
+    <button onclick="selectPitch('${pitch}')" class="btn-game ${colors[idx % colors.length]} text-white text-xs pitch-sel">
+      ${pitch.includes('Fastball') ? '⚡' : '🎯'} ${pitch}
+    </button>
+  `).join('');
+  
+  if (container.children.length > 0) {
+    container.children[0].style.outline = '2px solid #fbbf24';
+    pitchState.selectedPitch = options[0];
+  }
+}
+
+function selectPitch(name) {
+  pitchState.selectedPitch = name;
+  document.querySelectorAll('.pitch-sel').forEach(b => b.style.outline = 'none');
+  event.target.style.outline = '2px solid #fbbf24';
+}
+  const speed = parseInt(document.getElementById('pitch-speed').value);
+  const acc = gameState.pitching_accuracy / 100;
+  const zone = pitchState.selectedZone;
+  
+  const inZone = Math.random() < (acc * 0.7 + 0.3);
+  
+  const difficulty = gameState.skill_level === 'professional' ? 0.6 : gameState.skill_level === 'advanced' ? 0.5 : gameState.skill_level === 'intermediate' ? 0.4 : 0.3;
+  const batterSwings = Math.random() < (inZone ? 0.7 : 0.3);
+  const batterConnects = batterSwings && Math.random() < difficulty;
+  
+  let result;
+  if (!batterSwings && inZone) {
+    pitchState.strikes++;
+    result = `Called Strike! (${pitchState.selectedPitch} ${speed}mph)`;
+  } else if (!batterSwings && !inZone) {
+    pitchState.balls++;
+    result = `Ball! (${pitchState.selectedPitch} ${speed}mph)`;
+  } else if (batterSwings && !batterConnects) {
+    pitchState.strikes++;
+    result = `Swinging Strike! 🌀 (${pitchState.selectedPitch})`;
+  } else {
+    const roll = Math.random();
+    if (roll < 0.2) { result = 'Foul Ball!'; if (pitchState.strikes < 2) pitchState.strikes++; }
+    else if (roll < 0.5) { result = 'Ground Out! 🧤'; pitchState.outs++; pitchState.strikes = 0; pitchState.balls = 0; }
+    else if (roll < 0.7) { result = 'Fly Out! 🧤'; pitchState.outs++; pitchState.strikes = 0; pitchState.balls = 0; }
+    else if (roll < 0.85) { result = 'Single allowed 😤'; pitchState.strikes = 0; pitchState.balls = 0; }
+    else { result = 'Home Run given up! 💥'; pitchState.strikes = 0; pitchState.balls = 0; }
+  }
+  
+  if (pitchState.strikes >= 3) {
+    result = 'Strikeout! 🎉';
+    pitchState.outs++;
+    pitchState.strikes = 0;
+    pitchState.balls = 0;
+  }
+  if (pitchState.balls >= 4) {
+    result = 'Walk issued 😬';
+    pitchState.balls = 0;
+    pitchState.strikes = 0;
+  }
+  
+  document.getElementById('pitch-result').textContent = result;
+  document.getElementById('pitch-count').textContent = `Count: ${pitchState.balls}-${pitchState.strikes}`;
+  document.getElementById('pitch-outs').textContent = `Outs: ${pitchState.outs}`;
+  
+  if (pitchState.outs >= 3) {
+    setTimeout(() => {
+      pitchState.outs = 0;
+      document.getElementById('pitch-result').textContent = '🎉 Inning Over! Nice pitching!';
+      document.getElementById('pitch-outs').textContent = 'Outs: 0';
+    }, 1500);
+  }
+}
+
+function resetPitching() {
+  pitchState = { strikes: 0, balls: 0, outs: 0, selectedPitch: 'Fastball', selectedZone: 4 };
+}
+
+// TRAINING
+function updateTrainingBars() {
+  const vals = [
+    ['train-contact', 'contact-bar', gameState.batting_contact],
+    ['train-power', 'power-bar', gameState.batting_power],
+    ['train-speed', 'speed-bar', gameState.pitching_speed],
+    ['train-accuracy', 'accuracy-bar', gameState.pitching_accuracy],
+    ['train-range', 'range-bar', gameState.fielding_range],
+    ['train-fspeed', 'fspeed-bar', gameState.fielding_speed]
+  ];
+  vals.forEach(([numId, barId, val]) => {
+    const numEl = document.getElementById(numId);
+    const barEl = document.getElementById(barId);
+    if (numEl) numEl.textContent = val;
+    if (barEl) barEl.style.width = val + '%';
+  });
+}
+
+async function trainBatting() {
+  const gain = Math.floor(Math.random() * 3) + 1;
+  const type = Math.random() < 0.5 ? 'contact' : 'power';
+  if (type === 'contact') gameState.batting_contact = Math.min(100, gameState.batting_contact + gain);
+  else gameState.batting_power = Math.min(100, gameState.batting_power + gain);
+  
+  document.getElementById('bat-train-result').textContent = `+${gain} ${type}! 🎯 Great swing!`;
+  updateTrainingBars();
+  await saveState();
+}
+
+async function trainPitching() {
+  const gain = Math.floor(Math.random() * 3) + 1;
+  const type = Math.random() < 0.5 ? 'speed' : 'accuracy';
+  if (type === 'speed') gameState.pitching_speed = Math.min(100, gameState.pitching_speed + gain);
+  else gameState.pitching_accuracy = Math.min(100, gameState.pitching_accuracy + gain);
+  
+  document.getElementById('pitch-train-result').textContent = `+${gain} ${type}! 🤖 Robo-catcher approves!`;
+  updateTrainingBars();
+  await saveState();
+}
+
+async function trainFielding() {
+  const gain = Math.floor(Math.random() * 3) + 1;
+  gameState.fielding_range = Math.min(100, gameState.fielding_range + gain);
+  document.getElementById('field-train-result').textContent = `+${gain} range! 🧤 Nice catch!`;
+  updateTrainingBars();
+  await saveState();
+}
+
+async function trainSpeed() {
+  const gain = Math.floor(Math.random() * 2) + 1;
+  gameState.fielding_speed = Math.min(100, gameState.fielding_speed + gain);
+  document.getElementById('speed-train-result').textContent = `+${gain} speed! 🏃 Those ankle weights work!`;
+  updateTrainingBars();
+  await saveState();
+}
+
+async function saveState() {
+  const data = { type: 'team', ...gameState };
+  if (savedRecord) {
+    await window.dataSdk.update({ ...savedRecord, ...data });
+  } else {
+    await window.dataSdk.create(data);
+  }
+}
+
+// TEAM ROSTER
+function updateTeamRoster() {
+  const roster = document.getElementById('team-roster');
+  if (!roster) return;
+  const players = [
+    { name: gameState.p1_name, pos: '1B', height: "6'7\"", build: 'Skinny', desc: 'Huge reach, great scoops', evolved: gameState.p1_evolved },
+    { name: gameState.p2_name, pos: '2B', height: "5'5\"", build: 'Chunky', desc: 'Quick reactions, fast turns', evolved: gameState.p2_evolved },
+    { name: gameState.p3_name, pos: '3B', height: "7'0\"", build: 'Big', desc: 'Strong arm, power hitter', evolved: gameState.p3_evolved },
+    { name: gameState.of1_name, pos: 'LF', height: "7'5\"", build: 'Tall', desc: 'Massive range', evolved: gameState.of1_evolved },
+    { name: gameState.of2_name, pos: 'CF', height: "7'5\"", build: 'Tall', desc: 'Robs home runs', evolved: gameState.of2_evolved },
+    { name: gameState.of3_name, pos: 'RF', height: "7'5\"", build: 'Tall', desc: 'Cannon arm', evolved: gameState.of3_evolved }
+  ];
+  
+  roster.innerHTML = players.map((p, idx) => `
+    <div class="bg-black/30 rounded-xl p-4 text-center" style="border-left: 4px solid ${gameState.jersey_color}">
+      <div class="text-3xl mb-1">${p.evolved > 0 ? '✨🐼' : '🐼'}</div>
+      <div class="font-bold text-amber-300">${p.name}</div>
+      <div class="text-xs text-gray-400">${p.pos} | ${p.height} | ${p.build}</div>
+      <div class="text-xs text-green-300 mt-1">${p.desc}</div>
+      ${p.evolved > 0 ? `<div class="text-xs text-purple-300 mt-2 font-bold">Evolution Level: ${p.evolved}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function updateEvolutionRoster() {
+  const roster = document.getElementById('evolution-roster');
+  if (!roster) return;
+  const players = [
+    { name: gameState.p1_name, pos: '1B', idx: 0, evolved: gameState.p1_evolved },
+    { name: gameState.p2_name, pos: '2B', idx: 1, evolved: gameState.p2_evolved },
+    { name: gameState.p3_name, pos: '3B', idx: 2, evolved: gameState.p3_evolved },
+    { name: gameState.of1_name, pos: 'LF', idx: 3, evolved: gameState.of1_evolved },
+    { name: gameState.of2_name, pos: 'CF', idx: 4, evolved: gameState.of2_evolved },
+    { name: gameState.of3_name, pos: 'RF', idx: 5, evolved: gameState.of3_evolved },
+    { name: gameState.pitcher_name, pos: 'P', idx: 6, evolved: gameState.pitcher_evolved }
+  ];
+  
+  roster.innerHTML = players.map(p => `
+    <div class="bg-black/30 rounded-xl p-5 text-center border border-purple-500">
+      <div class="text-4xl mb-2">${p.evolved > 0 ? '✨🐼' : '🐼'}</div>
+      <div class="font-bold text-amber-300 mb-2">${p.name}</div>
+      <div class="text-xs text-gray-300 mb-3">${p.pos}</div>
+      <div class="text-sm mb-3">
+        <div class="text-purple-300 font-bold">Evolution Level: ${p.evolved}/5</div>
+        <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
+          <div class="bg-purple-600 h-full rounded-full transition-all" style="width: ${(p.evolved / 5) * 100}%"></div>
+        </div>
+      </div>
+      ${p.evolved < 5 ? `
+        <button onclick="evolvePanda(${p.idx})" class="btn-game bg-purple-600 text-white text-sm w-full">⭐ Evolve!</button>
+      ` : `
+        <div class="text-xs text-purple-300 font-bold">MAX EVOLUTION!</div>
+      `}
+    </div>
+  `).join('');
+  
+  updateLearnedPitchesDisplay();
+}
+
+async function evolvePanda(idx) {
+  const playerEvolKeys = ['p1_evolved', 'p2_evolved', 'p3_evolved', 'of1_evolved', 'of2_evolved', 'of3_evolved', 'pitcher_evolved'];
+  const key = playerEvolKeys[idx];
+  
+  if (gameState[key] < 5) {
+    gameState[key]++;
+    
+    // Learn new pitches based on evolutions
+    const newPitches = [
+      'Sinker', 'Sweeper', 'Cutter', 'Two-Seam Fastball', 'Slurve'
+    ];
+    if (gameState[key] <= newPitches.length) {
+      learnNewPitch(newPitches[gameState[key] - 1]);
+    }
+    // 6th evolution gets Screwball, 7th gets Eephus (but we only show 5 levels)
+    if (gameState[key] === 5) {
+      learnNewPitch('Screwball');
+      learnNewPitch('Eephus');
+    }
+    
+    // Boost stats beyond 100
+    const statBoost = 15;
+    gameState.batting_contact = Math.min(150, gameState.batting_contact + statBoost);
+    gameState.batting_power = Math.min(150, gameState.batting_power + statBoost);
+    gameState.pitching_speed = Math.min(150, gameState.pitching_speed + statBoost);
+    gameState.pitching_accuracy = Math.min(150, gameState.pitching_accuracy + statBoost);
+    gameState.fielding_speed = Math.min(150, gameState.fielding_speed + statBoost);
+    gameState.fielding_range = Math.min(150, gameState.fielding_range + statBoost);
+    
+    updateEvolutionRoster();
+    await saveState();
+  }
+}
+
+function updateLearnedPitchesDisplay() {
+  const section = document.getElementById('learned-pitches-section');
+  const list = document.getElementById('pitch-list');
+  const pitches = gameState.learned_pitches.split(',').map(p => p.trim());
+  
+  if (pitches.length > 1) {
+    section.classList.remove('hidden');
+    list.innerHTML = pitches.map(p => `
+      <div class="bg-black/40 rounded p-3 border border-amber-600/50 text-center">
+        <div class="text-sm text-amber-300 font-bold">${p}</div>
+      </div>
+    `).join('');
+  } else {
+    section.classList.add('hidden');
+  }
+}
+
+// Init
+updateUIFromState();
+lucide.createIcons();
+</script>
+   <div id="app" class="h-full w-full overflow-auto bg-gradient-to-b from-green-900 via-green-800 to-emerald-900 text-white"><!-- MAIN MENU -->
+    <div id="menu-screen" class="h-full flex flex-col items-center justify-center p-6 screen-fade">
+     <div class="text-center mb-8">
+      <h1 id="game-title" class="bebas text-6xl md:text-8xl text-amber-400 drop-shadow-lg tracking-wide">Panda Baseball Dynasty</h1>
+      <p class="text-green-200 text-lg mt-2">🐼 ⚾ Build Your Panda Team &amp; Dominate!</p>
+     </div>
+     <div class="flex flex-col gap-3 w-full max-w-xs"><button onclick="showScreen('setup-screen')" class="btn-game bg-amber-500 text-black text-lg">🏟️ New Game Setup</button> <button onclick="startBatting()" class="btn-game bg-blue-600 text-white text-lg">⚾ Play Ball - Batting</button> <button onclick="startPitching()" class="btn-game bg-red-600 text-white text-lg">🎯 Play Ball - Pitching</button> <button onclick="showScreen('training-screen')" class="btn-game bg-purple-600 text-white text-lg">💪 Training</button> <button onclick="showScreen('team-screen')" class="btn-game bg-green-600 text-white text-lg">🐼 My Team</button>
+     </div>
+     <div id="record-display" class="mt-6 text-green-300 text-sm"></div>
+    </div><!-- SETUP SCREEN -->
+    <div id="setup-screen" class="h-full overflow-auto p-6 hidden screen-fade"><button onclick="showScreen('menu-screen')" class="btn-game bg-gray-700 text-white mb-4 text-sm">← Back</button>
+     <h2 class="bebas text-4xl text-amber-400 mb-4">Game Setup</h2>
+     <div class="grid md:grid-cols-2 gap-6 max-w-4xl"><!-- Skill Level -->
+      <div class="bg-black/30 rounded-xl p-4">
+       <h3 class="font-bold text-amber-300 mb-2">Skill Level</h3>
+       <div class="flex flex-wrap gap-2"><button onclick="setSkill('beginner')" class="btn-game bg-green-700 text-white text-sm skill-btn" data-level="beginner">🌱 Beginner</button> <button onclick="setSkill('intermediate')" class="btn-game bg-yellow-700 text-white text-sm skill-btn" data-level="intermediate">⭐ Intermediate</button> <button onclick="setSkill('advanced')" class="btn-game bg-orange-700 text-white text-sm skill-btn" data-level="advanced">🔥 Advanced</button> <button onclick="setSkill('professional')" class="btn-game bg-red-800 text-white text-sm skill-btn" data-level="professional">💎 Professional</button>
+       </div>
+      </div><!-- Stadium -->
+      <div class="bg-black/30 rounded-xl p-4">
+       <h3 class="font-bold text-amber-300 mb-2">Home Ballpark</h3><select id="stadium-select" onchange="gameState.stadium=this.value" class="w-full p-2 rounded bg-gray-800 text-white border border-gray-600"> <option value="Yankee Stadium">Yankee Stadium</option> <option value="Citi Field">Citi Field</option> <option value="Angel Stadium">Angel Stadium</option> <option value="Dodger Stadium">Dodger Stadium</option> <option value="Globe Life Field">Globe Life Field</option> </select>
+      </div><!-- Team Name -->
+      <div class="bg-black/30 rounded-xl p-4">
+       <h3 class="font-bold text-amber-300 mb-2">Team Name</h3><input id="team-name-input" type="text" placeholder="Bamboo Crushers" class="w-full p-2 rounded bg-gray-800 text-white border border-gray-600" oninput="gameState.team_name=this.value">
+      </div><!-- Jersey Color -->
+      <div class="bg-black/30 rounded-xl p-4">
+       <h3 class="font-bold text-amber-300 mb-2">Jersey Color</h3>
+       <div class="flex gap-2 flex-wrap"><button onclick="setJersey('#dc2626')" class="w-10 h-10 rounded-full bg-red-600 border-2 border-white/30 jersey-btn"></button> <button onclick="setJersey('#2563eb')" class="w-10 h-10 rounded-full bg-blue-600 border-2 border-white/30 jersey-btn"></button> <button onclick="setJersey('#16a34a')" class="w-10 h-10 rounded-full bg-green-600 border-2 border-white/30 jersey-btn"></button> <button onclick="setJersey('#9333ea')" class="w-10 h-10 rounded-full bg-purple-600 border-2 border-white/30 jersey-btn"></button> <button onclick="setJersey('#ea580c')" class="w-10 h-10 rounded-full bg-orange-600 border-2 border-white/30 jersey-btn"></button> <button onclick="setJersey('#0d9488')" class="w-10 h-10 rounded-full bg-teal-600 border-2 border-white/30 jersey-btn"></button>
+       </div>
+      </div><!-- Opponent -->
+      <div class="bg-black/30 rounded-xl p-4">
+       <h3 class="font-bold text-amber-300 mb-2">Opponent Team</h3><select id="opponent-select" onchange="gameState.opponent=this.value" class="w-full p-2 rounded bg-gray-800 text-white border border-gray-600"> <option value="NY Yankees">NY Yankees</option> <option value="LA Dodgers">LA Dodgers</option> <option value="Houston Astros">Houston Astros</option> <option value="Atlanta Braves">Atlanta Braves</option> <option value="Robo Bears">Robo Bears (Robot Team)</option> </select>
+      </div><!-- Panda Names -->
+      <div class="bg-black/30 rounded-xl p-4 md:col-span-2">
+       <h3 class="font-bold text-amber-300 mb-2">Name Your Pandas 🐼</h3>
+       <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div>
+         <label class="text-xs text-green-300">1B (6'7" Skinny)</label><input id="p1-name" type="text" placeholder="Slim Bamboo" class="w-full p-1.5 rounded bg-gray-800 text-white text-sm border border-gray-600" oninput="gameState.p1_name=this.value">
+        </div>
+        <div>
+         <label class="text-xs text-green-300">2B (5'5" Chunky)</label><input id="p2-name" type="text" placeholder="Rolly" class="w-full p-1.5 rounded bg-gray-800 text-white text-sm border border-gray-600" oninput="gameState.p2_name=this.value">
+        </div>
+        <div>
+         <label class="text-xs text-green-300">3B (7'0" Big)</label><input id="p3-name" type="text" placeholder="Thunder" class="w-full p-1.5 rounded bg-gray-800 text-white text-sm border border-gray-600" oninput="gameState.p3_name=this.value">
+        </div>
+        <div>
+         <label class="text-xs text-green-300">LF (7'5")</label><input id="of1-name" type="text" placeholder="Stretch" class="w-full p-1.5 rounded bg-gray-800 text-white text-sm border border-gray-600" oninput="gameState.of1_name=this.value">
+        </div>
+        <div>
+         <label class="text-xs text-green-300">CF (7'5")</label><input id="of2-name" type="text" placeholder="Tower" class="w-full p-1.5 rounded bg-gray-800 text-white text-sm border border-gray-600" oninput="gameState.of2_name=this.value">
+        </div>
+        <div>
+         <label class="text-xs text-green-300">RF (7'5")</label><input id="of3-name" type="text" placeholder="Giant" class="w-full p-1.5 rounded bg-gray-800 text-white text-sm border border-gray-600" oninput="gameState.of3_name=this.value">
+        </div>
+       </div>
+      </div><!-- Pitcher Names -->
+      <div class="bg-black/30 rounded-xl p-4 md:col-span-2">
+       <h3 class="font-bold text-amber-300 mb-2">Your Pitcher 🎯</h3>
+       <div class="grid grid-cols-1 gap-2">
+        <div>
+         <label class="text-xs text-green-300">Pitcher</label><input id="pitcher-name" type="text" placeholder="Strike Master" class="w-full p-1.5 rounded bg-gray-800 text-white text-sm border border-gray-600" oninput="gameState.pitcher_name=this.value">
+        </div>
+       </div>
+      </div>
+     </div><button onclick="saveSetup()" class="btn-game bg-amber-500 text-black text-lg mt-6">✅ Save &amp; Start</button>
+    </div><!-- BATTING SCREEN -->
+    <div id="batting-screen" class="h-full overflow-auto hidden screen-fade">
+     <div class="relative h-full flex flex-col"><!-- Stadium/Field View -->
+      <div class="flex-1 relative overflow-hidden" style="min-height: 300px;"><!-- Sky -->
+       <div class="absolute inset-0 bg-gradient-to-b from-sky-600 via-sky-400 to-green-600"></div><!-- Crowd -->
+       <div class="absolute top-0 left-0 right-0 h-24 flex items-end justify-center gap-0.5 overflow-hidden px-2">
+        <div id="crowd-container" class="flex gap-0.5 flex-wrap justify-center"></div>
+       </div><!-- Field (perspective view) -->
+       <div class="absolute bottom-0 left-0 right-0 h-3/5 field-perspective"><!-- Outfield grass -->
+        <div class="absolute inset-0 bg-gradient-to-b from-green-500 to-green-700" style="transform: rotateX(45deg); transform-origin: bottom;"></div><!-- Infield dirt -->
+        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-48 h-32 bg-amber-700 rounded-full opacity-60" style="transform: rotateX(45deg);"></div><!-- Bases -->
+        <div class="absolute bottom-16 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45" title="2nd Base"></div>
+        <div class="absolute bottom-10 left-[35%] w-4 h-4 bg-white rotate-45" title="3rd Base"></div>
+        <div class="absolute bottom-10 right-[35%] w-4 h-4 bg-white rotate-45" title="1st Base"></div><!-- Pitcher's mound -->
+        <div class="absolute bottom-12 left-1/2 -translate-x-1/2 w-6 h-3 bg-amber-800 rounded-full"></div><!-- Pitcher panda -->
+        <div class="absolute bottom-14 left-1/2 -translate-x-1/2 text-2xl">
+         🐼
+        </div><!-- Foul lines -->
+        <div class="absolute bottom-0 left-1/2 w-0.5 h-full bg-white/30 origin-bottom" style="transform: rotate(-45deg);"></div>
+        <div class="absolute bottom-0 left-1/2 w-0.5 h-full bg-white/30 origin-bottom" style="transform: rotate(45deg);"></div>
+       </div><!-- Ball animation area -->
+       <div id="ball-area" class="absolute inset-0 pointer-events-none flex items-center justify-center">
+        <div id="the-ball" class="w-5 h-5 bg-white rounded-full shadow-lg hidden border border-gray-300"></div>
+       </div><!-- HUD -->
+       <div class="absolute top-2 left-2 bg-black/60 rounded-lg p-2 text-xs">
+        <div id="bat-count" class="text-amber-300 font-bold">
+         Count: 0-0
+        </div>
+        <div id="bat-outs" class="text-red-300">
+         Outs: 0
+        </div>
+        <div id="bat-score" class="text-green-300">
+         Score: 0-0
+        </div>
+       </div><!-- Stadium name -->
+       <div class="absolute top-2 right-2 bg-black/60 rounded-lg p-2 text-xs">
+        <div id="stadium-name" class="text-amber-200 font-bold">
+         Yankee Stadium
+        </div>
+       </div>
+      </div><!-- Batting Controls -->
+      <div class="bg-gray-900 p-4 border-t border-gray-700">
+       <div class="flex items-center justify-between gap-4 flex-wrap"><!-- Strike Zone for aiming bat -->
+        <div class="text-center">
+         <p class="text-xs text-gray-400 mb-1">Aim Your Bat (Strike Zone)</p>
+         <div class="strike-zone mx-auto" id="bat-strike-zone"></div>
+        </div><!-- Timing Bar -->
+        <div class="text-center flex-1">
+         <p class="text-xs text-gray-400 mb-1">Timing</p>
+         <div class="timing-bar mx-auto mb-2">
+          <div id="timing-marker" class="timing-marker" style="left: 0%"></div>
+         </div>
+         <div id="timing-label" class="text-sm font-bold text-yellow-400">
+          Wait for pitch...
+         </div>
+         <div class="flex gap-2 justify-center mt-3"><button onclick="swingBat('contact')" class="btn-game bg-blue-600 text-white text-sm">🏏 Contact</button> <button onclick="swingBat('power')" class="btn-game bg-red-600 text-white text-sm">💥 Power</button> <button onclick="swingBat('bunt')" class="btn-game bg-gray-600 text-white text-sm">👆 Bunt</button>
+         </div><!-- Base Running UI -->
+         <div id="steal-section" class="hidden border-t border-gray-600 pt-3 mt-3">
+          <p class="text-xs text-gray-400 mb-2">🏃 On Base! Steal Next Base?</p>
+          <div class="flex gap-2 justify-center"><button onclick="attemptSteal()" class="btn-game bg-yellow-600 text-white text-sm">🏃 Steal!</button> <button onclick="stayBase()" class="btn-game bg-gray-600 text-white text-sm">Stay Safe</button>
+          </div>
+         </div><!-- Bases Display -->
+         <div id="bases-display" class="text-xs text-gray-400 mt-2 flex gap-1 justify-center">
+          <span>1B: <span id="base1" class="text-green-400">--</span></span> <span>2B: <span id="base2" class="text-green-400">--</span></span> <span>3B: <span id="base3" class="text-green-400">--</span></span>
+         </div>
+        </div><!-- Result -->
+        <div class="text-center min-w-[120px]">
+         <div id="bat-result" class="text-lg font-bold text-amber-400">
+          Ready!
+         </div><button onclick="nextPitch()" id="next-pitch-btn" class="btn-game bg-green-600 text-white text-sm mt-2">Next Pitch</button>
+        </div>
+       </div><button onclick="showScreen('menu-screen');resetBatting()" class="btn-game bg-gray-700 text-white text-xs mt-3">← Menu</button>
+      </div>
+     </div>
+    </div><!-- PITCHING SCREEN -->
+    <div id="pitching-screen" class="h-full overflow-auto hidden screen-fade">
+     <div class="relative h-full flex flex-col"><!-- Catcher's view -->
+      <div class="flex-1 relative overflow-hidden bg-gradient-to-b from-gray-700 via-gray-600 to-amber-800" style="min-height:280px;"><!-- Crowd behind -->
+       <div class="absolute top-0 left-0 right-0 h-16 flex items-end justify-center gap-0.5 overflow-hidden">
+        <div id="pitch-crowd" class="flex gap-0.5 flex-wrap justify-center"></div>
+       </div><!-- Batter silhouette -->
+       <div class="absolute bottom-20 right-[20%] text-4xl opacity-60">
+        🧍
+       </div><!-- Strike zone target -->
+       <div class="absolute bottom-16 left-1/2 -translate-x-1/2">
+        <p class="text-xs text-gray-300 text-center mb-1">Aim Your Pitch</p>
+        <div class="strike-zone" id="pitch-strike-zone"></div>
+       </div><!-- Pitch result display -->
+       <div id="pitch-result-area" class="absolute top-20 left-1/2 -translate-x-1/2 text-center">
+        <div id="pitch-result" class="text-2xl font-bold text-amber-400"></div>
+       </div><!-- HUD -->
+       <div class="absolute top-2 left-2 bg-black/60 rounded-lg p-2 text-xs">
+        <div id="pitch-count" class="text-amber-300 font-bold">
+         Count: 0-0
+        </div>
+        <div id="pitch-outs" class="text-red-300">
+         Outs: 0
+        </div>
+       </div>
+      </div><!-- Pitching Controls -->
+      <div class="bg-gray-900 p-4 border-t border-gray-700">
+       <div class="flex items-start justify-between gap-4 flex-wrap"><!-- Pitch Selection -->
+        <div>
+         <p class="text-xs text-gray-400 mb-1">Select Pitch</p>
+         <div class="flex flex-wrap gap-1" id="pitch-buttons"><button onclick="selectPitch('Fastball')" class="btn-game bg-red-700 text-white text-xs pitch-sel active">Fastball</button> <button onclick="selectPitch('Slider')" class="btn-game bg-blue-700 text-white text-xs pitch-sel">Slider</button> <button onclick="selectPitch('Curveball')" class="btn-game bg-purple-700 text-white text-xs pitch-sel">Curve</button> <button onclick="selectPitch('Changeup')" class="btn-game bg-green-700 text-white text-xs pitch-sel">Change</button> <button onclick="selectPitch('Splitter')" class="btn-game bg-orange-700 text-white text-xs pitch-sel">Split</button> <button onclick="selectPitch('Knuckleball')" class="btn-game bg-gray-600 text-white text-xs pitch-sel">Knuckle</button>
+         </div>
+        </div><!-- Speed Control -->
+        <div class="text-center">
+         <p class="text-xs text-gray-400 mb-1">Velocity: <span id="speed-val">85</span> mph</p><input type="range" min="60" max="102" value="85" class="speed-slider w-32" id="pitch-speed" oninput="document.getElementById('speed-val').textContent=this.value">
+        </div><!-- Throw Button -->
+        <div class="text-center"><button onclick="throwPitch()" class="btn-game bg-amber-500 text-black text-lg">🎯 Throw!</button>
+        </div>
+       </div><button onclick="showScreen('menu-screen');resetPitching()" class="btn-game bg-gray-700 text-white text-xs mt-3">← Menu</button>
+      </div>
+     </div>
+    </div><!-- TRAINING SCREEN -->
+    <div id="training-screen" class="h-full overflow-auto p-6 hidden screen-fade"><button onclick="showScreen('menu-screen')" class="btn-game bg-gray-700 text-white mb-4 text-sm">← Back</button>
+     <h2 class="bebas text-4xl text-amber-400 mb-4">Training Center 💪</h2>
+     <div class="grid md:grid-cols-2 gap-4 max-w-4xl"><!-- Batting Cage -->
+      <div class="bg-black/30 rounded-xl p-5">
+       <h3 class="font-bold text-amber-300 text-lg mb-2">🏏 Batting Cage</h3>
+       <p class="text-sm text-green-200 mb-3">Train contact and power. Hit balls from the machine!</p>
+       <div class="mb-3">
+        <div class="flex justify-between text-xs text-gray-300 mb-1">
+         <span>Contact</span><span id="train-contact">50</span>/100
+        </div>
+        <div class="w-full h-3 bg-gray-700 rounded-full">
+         <div id="contact-bar" class="h-full bg-blue-500 rounded-full transition-all" style="width:50%"></div>
+        </div>
+       </div>
+       <div class="mb-3">
+        <div class="flex justify-between text-xs text-gray-300 mb-1">
+         <span>Power</span><span id="train-power">50</span>/100
+        </div>
+        <div class="w-full h-3 bg-gray-700 rounded-full">
+         <div id="power-bar" class="h-full bg-red-500 rounded-full transition-all" style="width:50%"></div>
+        </div>
+       </div><button onclick="trainBatting()" class="btn-game bg-blue-600 text-white text-sm w-full">⚾ Practice Hitting</button>
+       <div id="bat-train-result" class="text-sm text-center mt-2 text-green-300"></div>
+      </div><!-- Pitching Practice -->
+      <div class="bg-black/30 rounded-xl p-5">
+       <h3 class="font-bold text-amber-300 text-lg mb-2">🎯 Pitching Lab</h3>
+       <p class="text-sm text-green-200 mb-3">Robo-catcher throws back! Improve speed &amp; accuracy.</p>
+       <div class="mb-3">
+        <div class="flex justify-between text-xs text-gray-300 mb-1">
+         <span>Speed</span><span id="train-speed">50</span>/100
+        </div>
+        <div class="w-full h-3 bg-gray-700 rounded-full">
+         <div id="speed-bar" class="h-full bg-orange-500 rounded-full transition-all" style="width:50%"></div>
+        </div>
+       </div>
+       <div class="mb-3">
+        <div class="flex justify-between text-xs text-gray-300 mb-1">
+         <span>Accuracy</span><span id="train-accuracy">50</span>/100
+        </div>
+        <div class="w-full h-3 bg-gray-700 rounded-full">
+         <div id="accuracy-bar" class="h-full bg-purple-500 rounded-full transition-all" style="width:50%"></div>
+        </div>
+       </div><button onclick="trainPitching()" class="btn-game bg-orange-600 text-white text-sm w-full">🤖 Throw to Robo-Catcher</button>
+       <div id="pitch-train-result" class="text-sm text-center mt-2 text-green-300"></div>
+      </div><!-- Fielding -->
+      <div class="bg-black/30 rounded-xl p-5">
+       <h3 class="font-bold text-amber-300 text-lg mb-2">🧤 Fielding Drill</h3>
+       <p class="text-sm text-green-200 mb-3">Your best hitter self-pitches. Run and catch the ball!</p>
+       <div class="mb-3">
+        <div class="flex justify-between text-xs text-gray-300 mb-1">
+         <span>Range</span><span id="train-range">50</span>/100
+        </div>
+        <div class="w-full h-3 bg-gray-700 rounded-full">
+         <div id="range-bar" class="h-full bg-green-500 rounded-full transition-all" style="width:50%"></div>
+        </div>
+       </div><button onclick="trainFielding()" class="btn-game bg-green-600 text-white text-sm w-full">🏃 Chase Fly Balls</button>
+       <div id="field-train-result" class="text-sm text-center mt-2 text-green-300"></div>
+      </div><!-- Speed Training -->
+      <div class="bg-black/30 rounded-xl p-5">
+       <h3 class="font-bold text-amber-300 text-lg mb-2">🏃 Speed Training</h3>
+       <p class="text-sm text-green-200 mb-3">Run with ankle weights to build speed!</p>
+       <div class="mb-3">
+        <div class="flex justify-between text-xs text-gray-300 mb-1">
+         <span>Speed</span><span id="train-fspeed">50</span>/100
+        </div>
+        <div class="w-full h-3 bg-gray-700 rounded-full">
+         <div id="fspeed-bar" class="h-full bg-yellow-500 rounded-full transition-all" style="width:50%"></div>
+        </div>
+       </div><button onclick="trainSpeed()" class="btn-game bg-yellow-600 text-black text-sm w-full">🏋️ Ankle Weight Sprints</button>
+       <div id="speed-train-result" class="text-sm text-center mt-2 text-green-300"></div>
+      </div><!-- Evolution Chamber Button -->
+      <div class="bg-black/30 rounded-xl p-5 border-2 border-purple-500">
+       <h3 class="font-bold text-amber-300 text-lg mb-2">✨ Evolution Chamber</h3>
+       <p class="text-sm text-green-200 mb-3">Evolve your ${gameState.pitcher_name} and all pandas to unlock true power!</p><button onclick="showScreen('evolution-screen')" class="btn-game bg-purple-600 text-white text-sm w-full">✨ Enter Evolution Chamber</button>
+      </div>
+     </div><!-- TEAM SCREEN -->
+     <div id="team-screen" class="h-full overflow-auto p-6 hidden screen-fade"><button onclick="showScreen('menu-screen')" class="btn-game bg-gray-700 text-white mb-4 text-sm">← Back</button>
+      <h2 class="bebas text-4xl text-amber-400 mb-4">Your Panda Squad 🐼</h2>
+      <div id="team-roster" class="grid md:grid-cols-3 gap-4 max-w-4xl"><!-- Filled dynamically -->
+      </div>
+      <div class="flex gap-3 mt-6 max-w-4xl"><button onclick="showScreen('evolution-screen')" class="btn-game bg-purple-600 text-white text-lg flex-1">✨ Evolution Chamber</button>
+      </div>
+     </div><!-- EVOLUTION SCREEN -->
+     <div id="evolution-screen" class="h-full overflow-auto p-6 hidden screen-fade"><button onclick="showScreen('menu-screen')" class="btn-game bg-gray-700 text-white mb-4 text-sm">← Back</button>
+      <h2 class="bebas text-4xl text-amber-400 mb-4">Evolution Chamber ✨</h2>
+      <p class="text-green-200 mb-6">Evolve your pandas to unlock their true potential and exceed 100 stats!</p>
+      <div class="grid md:grid-cols-3 gap-4 max-w-4xl" id="evolution-roster"><!-- Filled dynamically -->
+      </div>
+      <div id="learned-pitches-section" class="mt-8 bg-black/30 rounded-xl p-6 max-w-4xl hidden">
+       <h3 class="font-bold text-amber-300 text-lg mb-3">🎯 Learned Pitches</h3>
+       <div id="pitch-list" class="grid md:grid-cols-2 gap-2"></div>
+      </div>
+     </div>
+    </div>
+    <script>
+// Game State
+let gameState = {
+  team_name: 'Bamboo Crushers',
+  stadium: 'Yankee Stadium',
+  skill_level: 'beginner',
+  jersey_color: '#2563eb',
+  p1_name: 'Slim Bamboo',
+  p2_name: 'Rolly',
+  p3_name: 'Thunder',
+  of1_name: 'Stretch',
+  of2_name: 'Tower',
+  of3_name: 'Giant',
+  pitcher_name: 'Strike Master',
+  opponent: 'NY Yankees',
+  batting_contact: 50,
+  batting_power: 50,
+  pitching_speed: 50,
+  pitching_accuracy: 50,
+  fielding_speed: 50,
+  fielding_range: 50,
+  p1_evolved: 0,
+  p2_evolved: 0,
+  p3_evolved: 0,
+  of1_evolved: 0,
+  of2_evolved: 0,
+  of3_evolved: 0,
+  pitcher_evolved: 0,
+  learned_pitches: 'Fastball',
+  wins: 0,
+  losses: 0
+};
+
+let savedRecord = null;
+
+// Batting state
+let batState = { strikes: 0, balls: 0, outs: 0, score: [0,0], selectedZone: 4, pitchActive: false, timingPos: 0, timingInterval: null, bases: [false, false, false], currentBase: 0, canSteal: false };
 // Pitching state
 let pitchState = { strikes: 0, balls: 0, outs: 0, selectedPitch: 'Fastball', selectedZone: 4 };
 
@@ -585,6 +1795,10 @@ function swingBat(type) {
       batState.outs++;
       batState.strikes = 0;
       batState.balls = 0;
+      batState.bases = [false, false, false];
+      batState.currentBase = 0;
+      // Show fielder selection for fly ball
+      document.getElementById('fielder-select-ui').classList.remove('hidden');
     }
     
     if (result.includes('Foul')) {
@@ -597,7 +1811,7 @@ function swingBat(type) {
     
     // Animate ball
     if (!result.includes('Foul') && !result.includes('Out') && !result.includes('Strike')) {
-      animateBall(result);
+      animateBall3D(result);
     }
   }
   
@@ -636,10 +1850,18 @@ function updateBatHUD() {
   document.getElementById('bat-count').textContent = `Count: ${batState.balls}-${batState.strikes}`;
   document.getElementById('bat-outs').textContent = `Outs: ${batState.outs}`;
   document.getElementById('bat-score').textContent = `Score: ${batState.score[0]}-${batState.score[1]}`;
+  
+  // Update bases display
+  const b1 = document.getElementById('base1');
+  const b2 = document.getElementById('base2');
+  const b3 = document.getElementById('base3');
+  if (b1) b1.textContent = batState.bases[0] ? '🐼' : '--';
+  if (b2) b2.textContent = batState.bases[1] ? '🐼' : '--';
+  if (b3) b3.textContent = batState.bases[2] ? '🐼' : '--';
 }
 
 function resetBatting() {
-  batState = { strikes: 0, balls: 0, outs: 0, score: [0,0], selectedZone: 4, pitchActive: false, timingPos: 0, timingInterval: null };
+  batState = { strikes: 0, balls: 0, outs: 0, score: [0,0], selectedZone: 4, pitchActive: false, timingPos: 0, timingInterval: null, bases: [false, false, false], currentBase: 0, canSteal: false };
   if (batState.timingInterval) clearInterval(batState.timingInterval);
   timingRunning = false;
 }
@@ -656,6 +1878,22 @@ function selectPitch(name) {
   pitchState.selectedPitch = name;
   document.querySelectorAll('.pitch-sel').forEach(b => b.style.outline = 'none');
   event.target.style.outline = '2px solid #fbbf24';
+}
+
+function getPitchOptions() {
+  const allPitches = ['Fastball', 'Slider', 'Curveball', 'Changeup', 'Splitter', 'Knuckleball', 'Sinker', 'Sweeper', 'Cutter', 'Two-Seam Fastball', 'Slurve', 'Screwball', 'Eephus'];
+  const learned = gameState.learned_pitches.split(',').map(p => p.trim());
+  return allPitches.filter(p => learned.includes(p));
+}
+
+function learnNewPitch(pitchName) {
+  const learned = gameState.learned_pitches.split(',').map(p => p.trim());
+  if (!learned.includes(pitchName)) {
+    learned.push(pitchName);
+    gameState.learned_pitches = learned.join(',');
+    return true;
+  }
+  return false;
 }
 
 function throwPitch() {
@@ -790,20 +2028,22 @@ function updateTeamRoster() {
   const roster = document.getElementById('team-roster');
   if (!roster) return;
   const players = [
-    { name: gameState.p1_name, pos: '1B', height: "6'7\"", build: 'Skinny', desc: 'Huge reach, great scoops' },
-    { name: gameState.p2_name, pos: '2B', height: "5'5\"", build: 'Chunky', desc: 'Quick reactions, fast turns' },
-    { name: gameState.p3_name, pos: '3B', height: "7'0\"", build: 'Big', desc: 'Strong arm, power hitter' },
-    { name: gameState.of1_name, pos: 'LF', height: "7'5\"", build: 'Tall', desc: 'Massive range' },
-    { name: gameState.of2_name, pos: 'CF', height: "7'5\"", build: 'Tall', desc: 'Robs home runs' },
-    { name: gameState.of3_name, pos: 'RF', height: "7'5\"", build: 'Tall', desc: 'Cannon arm' }
+    { name: gameState.p1_name, pos: '1B', height: "6'7\"", build: 'Skinny', desc: 'Huge reach, great scoops', evolved: gameState.p1_evolved },
+    { name: gameState.p2_name, pos: '2B', height: "5'5\"", build: 'Chunky', desc: 'Quick reactions, fast turns', evolved: gameState.p2_evolved },
+    { name: gameState.p3_name, pos: '3B', height: "7'0\"", build: 'Big', desc: 'Strong arm, power hitter', evolved: gameState.p3_evolved },
+    { name: gameState.of1_name, pos: 'LF', height: "7'5\"", build: 'Tall', desc: 'Massive range', evolved: gameState.of1_evolved },
+    { name: gameState.of2_name, pos: 'CF', height: "7'5\"", build: 'Tall', desc: 'Robs home runs', evolved: gameState.of2_evolved },
+    { name: gameState.of3_name, pos: 'RF', height: "7'5\"", build: 'Tall', desc: 'Cannon arm', evolved: gameState.of3_evolved },
+    { name: gameState.pitcher_name, pos: 'P', height: "6'3\"", build: 'Athletic', desc: 'Legendary arm, strike specialist', evolved: gameState.pitcher_evolved }
   ];
   
-  roster.innerHTML = players.map(p => `
+  roster.innerHTML = players.map((p, idx) => `
     <div class="bg-black/30 rounded-xl p-4 text-center" style="border-left: 4px solid ${gameState.jersey_color}">
-      <div class="text-3xl mb-1">🐼</div>
+      <div class="text-3xl mb-1">${p.evolved > 0 ? '✨🐼' : '🐼'}</div>
       <div class="font-bold text-amber-300">${p.name}</div>
       <div class="text-xs text-gray-400">${p.pos} | ${p.height} | ${p.build}</div>
       <div class="text-xs text-green-300 mt-1">${p.desc}</div>
+      ${p.evolved > 0 ? `<div class="text-xs text-purple-300 mt-2 font-bold">Evolution Level: ${p.evolved}</div>` : ''}
     </div>
   `).join('');
 }
@@ -812,5 +2052,7 @@ function updateTeamRoster() {
 updateUIFromState();
 lucide.createIcons();
 </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9fc546a81120434b',t:'MTc3ODg4MDk2My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+   </div>
+  </div>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9fc5998a5471227d',t:'MTc3ODg4NDM1OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
